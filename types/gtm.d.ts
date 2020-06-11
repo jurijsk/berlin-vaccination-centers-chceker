@@ -1,7 +1,12 @@
 declare var dataLayer: Array<Object>;
 
-declare interface GTMTrackingEvent {
-	event: string;
+declare interface DataLayerMessage {
+	event?: string;
 	category?: string;
-	[key: string]: string | number;
+	//payment_step?: string;
+	error_type?: string;
+	error_message?: string;
+	gateway_id?: string,
+	gateway_label?: string,
+	gateway_group?: string;
 }
