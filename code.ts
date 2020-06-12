@@ -254,14 +254,38 @@ interface PMAContext {
 		log(`on load handler`);
 	}
 
-	var init = function init() {
+	let logNavigation = function logNavigation(){
+		if(!document.location.hostname.startsWith("checkout.")){
+			return;
+		}
+
+		let shopify_step = 'unknown';
+		let shopify_page = 'unknown';
+		if(Shopify && Shopify.Checkout){
+			shopify_step = Shopify.Checkout.step;
+			shopify_page = Shopify.Checkout.page;
+		}
+
+		let msg = `(log) step: ${shopify_step}; page: ${shopify_page}; referrer: ${document.referrer}`;
+		track({
+			event: 'navlog',
+			category: 'Log',
+			label: msg,
+			gateway_label: context.gateway_label,
+			gateway_id: context.gateway_id
+		});
+	}
+
+	let init = function init() {
+		context = restore() || {} as PMAContext;
+		logNavigation();
 		if(Shopify && Shopify.Checkout) {
 			debug('(init) shopify step: ' + Shopify.Checkout.step + " and page:  " + Shopify.Checkout.page);
 		} else {
 			debug('(init) No Shopify.Checkout exits');
 		}
 		window.dataLayer = window.dataLayer || [];
-		context = restore() || {} as PMAContext;
+		
 		fireCheckoutStepEvent();
 		document.addEventListener('page:change', onChange);
 		if(Shopify && Shopify.Checkout && Shopify.Checkout.step == CheckoutSteps.payment_method) {

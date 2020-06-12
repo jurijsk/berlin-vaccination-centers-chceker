@@ -3,6 +3,7 @@ declare var dataLayer: Array<Object>;
 declare interface DataLayerMessage {
 	event?: string;
 	category?: string;
+	label?: string;
 	//payment_step?: string;
 	error_type?: string;
 	error_message?: string;
