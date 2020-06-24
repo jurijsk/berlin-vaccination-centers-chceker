@@ -74,7 +74,7 @@ interface PMAContext {
 		return element.getAttribute("data-gateway-group");
 	}
 
-	const getGatewayLabel = function getGatewayLabel(element) {
+	const getGatewayLabel = function getGatewayLabel(element: HTMLLabelElement) {
 		if(!element) {
 			return;
 		}
@@ -254,31 +254,9 @@ interface PMAContext {
 		log(`on load handler`);
 	}
 
-	let logNavigation = function logNavigation(){
-		if(!document.location.hostname.startsWith("checkout.")){
-			return;
-		}
-
-		let shopify_step = 'unknown';
-		let shopify_page = 'unknown';
-		if(Shopify && Shopify.Checkout){
-			shopify_step = Shopify.Checkout.step;
-			shopify_page = Shopify.Checkout.page;
-		}
-
-		let msg = `(log) step: ${shopify_step}; page: ${shopify_page}; referrer: ${document.referrer}`;
-		track({
-			event: 'navlog',
-			category: 'Log',
-			label: msg,
-			gateway_label: context.gateway_label,
-			gateway_id: context.gateway_id
-		});
-	}
 
 	let init = function init() {
 		context = restore() || {} as PMAContext;
-		logNavigation();
 		if(Shopify && Shopify.Checkout) {
 			debug('(init) shopify step: ' + Shopify.Checkout.step + " and page:  " + Shopify.Checkout.page);
 		} else {
