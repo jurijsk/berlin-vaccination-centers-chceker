@@ -3,6 +3,7 @@ interface PMAContext {
 	gateway_label: string
 	gateway_id: string;
 	payment_step: string;
+	checkout_token: string;
 } 
 (function PaymentMethodAnalisys() {
 	const debuging = false;
@@ -81,12 +82,13 @@ interface PMAContext {
 		return element.textContent.trim();
 	}
 
-	var collectGatewayParams = function collectGatewayParams(radioButton?: HTMLInputElement) {
+	var collectCheckoutParams = function collectCheckoutParams(radioButton?: HTMLInputElement) {
 		const errorType = 'collect_gateway_params';
-		const gatewayParams = {
+		const checkoutParams = {
 			gateway_id: null,
 			gateway_label: null,
-			gateway_group: null
+			gateway_group: null,
+			checkout_token: null,
 		};
 		if(!radioButton) {
 			let radioButtons = document.querySelectorAll<HTMLInputElement>(paymentMethodsSection);
@@ -100,7 +102,7 @@ interface PMAContext {
 
 		if(!radioButton) {
 			reportError(errorType, 'Selection element not found. Can not specify gateway params');
-			return gatewayParams;
+			return checkoutParams;
 		}
 
 		const label = radioButton.labels ? radioButton.labels[0] : null;
@@ -108,7 +110,7 @@ interface PMAContext {
 			reportError(errorType, 'Selected payment method label not found. Can not specify gateway label');
 		} else {
 			const gatewayLabel = getGatewayLabel(label);
-			gatewayLabel && (gatewayParams.gateway_label = gatewayLabel);
+			gatewayLabel && (checkoutParams.gateway_label = gatewayLabel);
 		}
 		if(!radioButton.closest) {
 			reportError(errorType, 'Can not find parent element. Can not specify gateway params');
@@ -118,11 +120,16 @@ interface PMAContext {
 				reportError(errorType, 'Selected payment data not found. Can not specify gateway params');
 			}
 			const id = getGatewayId(paymentMethodRow);
-			id && (gatewayParams.gateway_id = id);
+			id && (checkoutParams.gateway_id = id);
 			const group = getGatewayGroup(paymentMethodRow);
-			group && (gatewayParams.gateway_group = group);
+			group && (checkoutParams.gateway_group = group);
 		}
-		return gatewayParams;
+
+		if(Shopify && Shopify.Checkout){
+			checkoutParams.checkout_token = Shopify.Checkout.token;
+		}
+
+		return checkoutParams;
 	}
 
 	var setupPaymentMethodSelectionTracking = function setupPaymentMethodSelectionTracking() {
@@ -140,9 +147,10 @@ interface PMAContext {
 				event: PaymentSteps.MethodSelected,
 			} as DataLayerMessage;
 
-			let gatewayParam = collectGatewayParams(radioButton as HTMLInputElement);
+			let gatewayParam = collectCheckoutParams(radioButton as HTMLInputElement);
 			context.gateway_label = gatewayParam.gateway_label;
 			context.gateway_id = gatewayParam.gateway_id;
+			context.checkout_token = gatewayParam.checkout_token;
 			Object.assign(event, gatewayParam);
 			track(event);
 		}
@@ -182,10 +190,11 @@ interface PMAContext {
 			let event = {
 				event: PaymentSteps.PaymentIntent
 			};
-			let gatewayParam = collectGatewayParams();
-			Object.assign(event, gatewayParam);
-			context.gateway_label = gatewayParam.gateway_label;
-			context.gateway_id = gatewayParam.gateway_id;
+			let checkoutParam = collectCheckoutParams();
+			Object.assign(event, checkoutParam);
+			context.gateway_label = checkoutParam.gateway_label;
+			context.gateway_id = checkoutParam.gateway_id;
+			context.checkout_token = checkoutParam.checkout_token;
 			store(context);
 			track(event);
 		};
@@ -234,7 +243,8 @@ interface PMAContext {
 			let event: DataLayerMessage = {
 				event: paymentStep,
 				gateway_label: context.gateway_label,
-				gateway_id: context.gateway_id
+				gateway_id: context.gateway_id,
+				checkout_token: context.checkout_token
 			}
 			track(event);
 

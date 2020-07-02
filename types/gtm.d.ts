@@ -10,4 +10,5 @@ declare interface DataLayerMessage {
 	gateway_id?: string,
 	gateway_label?: string,
 	gateway_group?: string;
+	checkout_token?: string;
 }
