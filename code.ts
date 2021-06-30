@@ -1,285 +1,176 @@
-interface PMAContext {
-	lastEvent: string,
-	gateway_label: string
-	gateway_id: string;
-	payment_step: string;
-	checkout_token: string;
-} 
-(function PaymentMethodAnalisys() {
+interface Center {
+	id: string,
+	name: string
+	url: string;
+	window?: Window | undefined;
+	lastUpdate?: number | undefined;
+}
+interface Centers {
+	[key: string]: Center;
+}
+
+
+(function thething() {
 	const debuging = false;
 
 	let log = function log(msg: string) {
-		console.log("PMA: " + msg);
+		console.log("C19: " + msg);
 	};
-	let debug = function debug(msg: string) {
-		debuging && console.log("PMA: " + msg);
-	}
 
-	'use strict';
 
-	const storage_key = 'pma_key';
-	var store = function store(value: PMAContext) {
-		if(!window.Storage) {
-			var expiresDate = new Date();
-			expiresDate.setDate(expiresDate.getDate() + 1);
-			document.cookie = storage_key + '=' + value + ';expires=' + expiresDate.toUTCString();
-		} else {
-			window.localStorage.setItem(storage_key, JSON.stringify(value));
-		}
-	};
-	var restore = function restore(): PMAContext {
-		let value: string = null;
-		if(!window.Storage) {
-			value = '; ' + document.cookie;
-			var parts = value.split('; ' + storage_key + '=');
-			if(parts.length === 2) {
-				value = parts.pop().split(';').shift();
-			}
-		} else {
-			value = window.localStorage.getItem(storage_key);
-		}
-		return JSON.parse(value);
-	};
-	var clear = function clear(){
-		if(!window.Storage){
-			document.cookie = storage_key + '=; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-		}else{
-			window.localStorage.removeItem(storage_key);
-		}
-	}
+	let tempelhof: Window;
 
-	const paymentMethodsSection = ".section--payment-method input[type='radio']";
-	const paymentMethodRowSelector = " [data-select-gateway]";
-
-	const CheckoutSteps = {payment_method: 'payment_method', forward: 'forward', processing: 'processing', thank_you: 'thank_you' , review: 'review'};
-
-	const PaymentSteps = {
-		PayemntMethodView: 'payment_method_view',
-		MethodSelected: 'payment_method_selected',
-		PaymentIntent: 'payment_intent',
-		Processing: 'payment_processing',
-		IntentCancelled: 'payment_intent_cancelled',
-		Paymentsuccessful: 'payment_successful',
-	}
-	
-	const getGatewayId = function getGatewayId(element) {
-		if(!element) {
-			return;
-		}
-		return element.getAttribute("data-select-gateway");
-	}
-	const getGatewayGroup = function getGatewayGroup(element) {
-		if(!element) {
-			return;
-		}
-		return element.getAttribute("data-gateway-group");
-	}
-
-	const getGatewayLabel = function getGatewayLabel(element: HTMLLabelElement) {
-		if(!element) {
-			return;
-		}
-		return element.textContent.trim();
-	}
-
-	var collectCheckoutParams = function collectCheckoutParams(radioButton?: HTMLInputElement) {
-		const errorType = 'collect_gateway_params';
-		const checkoutParams = {
-			gateway_id: null,
-			gateway_label: null,
-			gateway_group: null,
-			checkout_token: null,
-		};
-		if(!radioButton) {
-			let radioButtons = document.querySelectorAll<HTMLInputElement>(paymentMethodsSection);
-			for(let i = 0; i < radioButtons.length; i++) {
-				if(radioButtons[i].checked){
-					radioButton = radioButtons[i];
-					continue;
+	let onResponse = function onResponse(response: any) {
+		let stats = response.stats;
+		for(let i = 0; i < stats.length; i++) {
+			const centerStats = stats[i];
+			if(centerStats.open || (test && centerStats.id == 'tegel')) {
+				let center = centers[centerStats.id];
+				if(document.hasFocus() && centerStats.lastUpdate != center.lastUpdate){
+					log(`last update - ${center.id} - ${centerStats.lastUpdate}`);
+					center.lastUpdate = centerStats.lastUpdate;
+					if(!center.window || center.window.closed){
+						center.window = window.open(center.url, center.name);
+						log(`Opening ${center.name}: ${center.url}`);
+					}
 				}
 			}
 		}
-
-		if(!radioButton) {
-			reportError(errorType, 'Selection element not found. Can not specify gateway params');
-			return checkoutParams;
-		}
-
-		const label = radioButton.labels ? radioButton.labels[0] : null;
-		if(!label) {
-			reportError(errorType, 'Selected payment method label not found. Can not specify gateway label');
-		} else {
-			const gatewayLabel = getGatewayLabel(label);
-			gatewayLabel && (checkoutParams.gateway_label = gatewayLabel);
-		}
-		if(!radioButton.closest) {
-			reportError(errorType, 'Can not find parent element. Can not specify gateway params');
-		} else {
-			let paymentMethodRow = radioButton.closest(paymentMethodRowSelector);
-			if(!paymentMethodRow) {
-				reportError(errorType, 'Selected payment data not found. Can not specify gateway params');
-			}
-			const id = getGatewayId(paymentMethodRow);
-			id && (checkoutParams.gateway_id = id);
-			const group = getGatewayGroup(paymentMethodRow);
-			group && (checkoutParams.gateway_group = group);
-		}
-
-		if(Shopify && Shopify.Checkout){
-			checkoutParams.checkout_token = Shopify.Checkout.token;
-		}
-
-		return checkoutParams;
+		scheduleBeat();
+		updateStatus();
 	}
 
-	var setupPaymentMethodSelectionTracking = function setupPaymentMethodSelectionTracking() {
-		const errorType = 'payment_method_selection';
-		var paymentMethodChangedHandler = function paymentMethodChangedHandler(eventArgs) {
-			var radioButton = eventArgs.currentTarget;
-			if(radioButton.type != "radio") {
-				reportError(errorType, 'Can not find selection element. Can not update DL gateway params');
-				return;
-			}
-			if(!radioButton.checked) {
-				return;
-			}
-			let event = {
-				event: PaymentSteps.MethodSelected,
-			} as DataLayerMessage;
-
-			let gatewayParam = collectCheckoutParams(radioButton as HTMLInputElement);
-			context.gateway_label = gatewayParam.gateway_label;
-			context.gateway_id = gatewayParam.gateway_id;
-			context.checkout_token = gatewayParam.checkout_token;
-			Object.assign(event, gatewayParam);
-			track(event);
-		}
-
-		document.querySelectorAll(paymentMethodsSection)
-			.forEach((element) => {
-				element.addEventListener("change", paymentMethodChangedHandler)
-			});
-	}
-
-	var reportError = function reportError(type: string, message: string) {
-		debug(`(${type}) ${message}`);
-		track({
-			'event': 'error',
-			'error_type': type,
-			'error_message': message
-		});
-	}
-
-	var track = function track(event: DataLayerMessage) {
-		if(event.event != 'error') {
-
-		}
-		debug(`track(): ${JSON.stringify(event)}`);
-		window.dataLayer.push(event);
-	}
-
-	let setupPaymentIntentTracking = function setupPaymentIntentTracking() {
-		const errorType = 'payment_method_selection';
-		let button = document.getElementById("continue_button");
-		if(!button) {
-			reportError(errorType, 'continue_button not found. Could not subscripbe to payment intent event');
+	let updateStatus = function updateStatus() {
+		let indicator = document.getElementById("status");
+		if(!running){
+			indicator.innerText = 'Stopped';
 			return;
 		}
 
-		const continueButtonClickHandler = function continueButtonClickHandler() {
-			let event = {
-				event: PaymentSteps.PaymentIntent
-			};
-			let checkoutParam = collectCheckoutParams();
-			Object.assign(event, checkoutParam);
-			context.gateway_label = checkoutParam.gateway_label;
-			context.gateway_id = checkoutParam.gateway_id;
-			context.checkout_token = checkoutParam.checkout_token;
-			store(context);
-			track(event);
-		};
 
-		button.addEventListener('click', continueButtonClickHandler);
-	};
+		if(!indicator.innerText.startsWith('Looking')) {
+			indicator.innerText = 'Looking';
+		} else {
+			indicator.innerText += '.';
+		}
+	}
 
-	let context: PMAContext;
-	let fireCheckoutStepEvent = function fireCheckoutStepEvent() {
-
-		//debug(`fireCheckoutStepEvent`);
-		//let step = 'unknown';
-		let shopifyStep = 'unknown';
-		let paymentStep = 'unknown';
-
-		if(Shopify.Checkout && Shopify.Checkout.step in CheckoutSteps) {
-			shopifyStep = Shopify.Checkout.step;
-			if(shopifyStep == CheckoutSteps.processing || shopifyStep == CheckoutSteps.forward){
-				//amex does processing, others do forwarding => unifyinf
-				shopifyStep = CheckoutSteps.processing;
-			}
-			const previousPaymentStep = context.payment_step;
-			if(shopifyStep == CheckoutSteps.payment_method){
-				//if previous step was processing it means that user had a cancelleation: went back, declined or otherwise
-				if(previousPaymentStep == PaymentSteps.Processing){
-					paymentStep = PaymentSteps.IntentCancelled;
+	function httpGetAsync(onResponse: any) {
+		var xmlHttp = new XMLHttpRequest();
+		xmlHttp.onreadystatechange = function() {
+			if(xmlHttp.readyState == 4) {
+				if(xmlHttp.status == 200) {
+					onResponse(JSON.parse(xmlHttp.responseText));
 				} else {
-					paymentStep = PaymentSteps.PayemntMethodView;
+					console.debug(xmlHttp.status, xmlHttp.statusText, xmlHttp.responseText);
 				}
-			} else if(shopifyStep == CheckoutSteps.thank_you){
-				paymentStep = PaymentSteps.Paymentsuccessful;
-			} else if(shopifyStep == CheckoutSteps.processing){
-				if(previousPaymentStep == CheckoutSteps.processing){
-					//no need to report it twice;
-					return;
-				}
-				paymentStep = PaymentSteps.Processing;
-			} else if(!(shopifyStep in CheckoutSteps)) {
-				debug("clearing the store. (1)");
-				clear();
-			} else {
-				debug("Some other step: " + shopifyStep);
 			}
-			context.payment_step = paymentStep;
-			store(context);
-			let event: DataLayerMessage = {
-				event: paymentStep,
-				gateway_label: context.gateway_label,
-				gateway_id: context.gateway_id,
-				checkout_token: context.checkout_token
-			}
-			track(event);
+		}
+		xmlHttp.open("GET", 'https://api.impfstoff.link/?v=0.3&robot=1&thank_you=true', true); // true for asynchronous
+		
+		xmlHttp.setRequestHeader('Access-Control-Allow-Origin', '*');
+		//xmlHttp.setRequestHeader("Access-Control-Allow-Methods", "DELETE, POST, GET, OPTIONS");
+		//xmlHttp.setRequestHeader("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+		xmlHttp.send(null);
+	}
 
-			if(shopifyStep == CheckoutSteps.thank_you){
-				clear();
-			}
+
+	let beat = function beat() {
+		log('bit');
+		httpGetAsync(onResponse);
+	};
+
+
+	var centers: Centers = {
+		'arena': {
+			id: 'arena',
+			name: 'Arena Berlin',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158431'
+		},
+		'tempelhof': {
+			id: 'tempelhof',
+			name: 'Flughafen Tempelhof',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158433',
+		},
+		'messe': {
+			id: 'messe',
+			name: 'Messe Berlin',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158434',
+		},
+		'velodrom': {
+			id: 'velodrom',
+			name: 'Velodrom Berlin',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158435',
+		},
+		'tegel': {
+			id: 'tegel',
+			name: 'Tegel',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158436',
+		},
+		'erika': {
+			id: 'arena',
+			name: 'Erika-Heß-Eisstadion',
+			url: 'https://www.doctolib.de/institut/berlin/ciz-berlin-berlin?pid=practice-158437',
+		},
+	}
+	let scheduleBeat = function scheduleBeat() {
+		if(running) {
+			setTimeout(beat, 1000);
+		}
+	}
+
+	let running = false;
+	let onStopToggleClicked = function onStopToggleClicked() {
+
+
+		let stopToggle = document.getElementById("stopToggle") as HTMLInputElement;
+		if(running) {
+			stopToggle.value = 'Resume looking';
+			document.getElementById("status").innerText = '';
 		} else {
-			if(!document.location.hostname.startsWith("checkout.") //checkout.storename.com
-				|| !document.location.pathname.startsWith('/apps/w/pay')) { //visa/master with https://app-wallee.com
-				debug("clearing the store. (2)");
-				clear();
+			stopToggle.value = 'Stop looking';
+			beat();
+			//schedule stop
+			setTimeout(stop, 1000 * 60 * 10) //10 minutes. 
+		}
+		running = !running;
+	}
+
+	let stop = function stop() {
+		running = false;
+		let stopToggle = document.getElementById("stopToggle") as HTMLInputElement;
+		stopToggle.value = 'Start again';
+		updateStatus();
+	}
+
+	let ensureCenters = function ensureCenters() {
+		for(const key in centers) {
+			if(Object.prototype.hasOwnProperty.call(centers, key)) {
+				const center = centers[key];
+				center.window = window.open(center.url, center.name);
+				log('opening ' + center.name);
 			}
 		}
 	}
 
-	let onChange = function onChange() {
-		log(`on load handler`);
+	let test = false;
+	let onTestToggleClicked = function onTestToggleClicked(){
+		let testToggle = document.getElementById("testToggle") as HTMLInputElement;
+		if(test){
+			testToggle.value = 'Stop test';
+		}else{
+			testToggle.value = 'Test';
+		}
+		test = !test;
 	}
-
 
 	let init = function init() {
-		context = restore() || {} as PMAContext;
-		if(Shopify && Shopify.Checkout) {
-			debug('(init) shopify step: ' + Shopify.Checkout.step + " and page:  " + Shopify.Checkout.page);
-		} else {
-			debug('(init) No Shopify.Checkout exits');
-		}
-		window.dataLayer = window.dataLayer || [];
-		
-		fireCheckoutStepEvent();
-		document.addEventListener('page:change', onChange);
-		if(Shopify && Shopify.Checkout && Shopify.Checkout.step == CheckoutSteps.payment_method) {
-			setupPaymentMethodSelectionTracking();
-			setupPaymentIntentTracking();
-		}
+		let stopToggle = document.getElementById("stopToggle");
+		stopToggle.addEventListener('click', onStopToggleClicked);
+
+
+		let testToggle = document.getElementById("testToggle");
+		testToggle && testToggle.addEventListener('click', onTestToggleClicked);
 	};
 	init();
 })();
